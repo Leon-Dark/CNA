@@ -1,2 +1,1 @@
-# CNA
-Color-Name Aware Optimization to Enhance the Perception of Transparent Overlapped Charts
+# Optimizing Color Assignment for Transparent Overlapping Histograms

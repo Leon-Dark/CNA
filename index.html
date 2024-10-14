@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font: 11px sans-serif;
+            background: #eee;
+            text-align: center;
+        }
+
+        .axis path,
+        .axis line {
+            fill: none;
+            stroke: rgba(0, 0, 0, 0.3);
+            shape-rendering: crispEdges;
+        }
+
+        button {
+            width: 200px;
+        }
+
+        /* This parent can be any width and height */
+        #renderingDiv {
+            text-align: center;
+        }
+
+        /* The ghost, nudged to maintain perfect centering */
+        #renderingDiv:before {
+            content: '';
+            display: inline-block;
+            height: 100%;
+            vertical-align: middle;
+            margin-right: -0.25em;
+            /* Adjusts for spacing */
+        }
+
+        /* The element to be centered, can
+   also be of any width and height */
+        .delete_sign {
+            display: inline-block;
+            vertical-align: middle;
+            font-size: large;
+            float: right;
+            margin-right: 10px;
+        }
+    </style>
+    <link href="../css/elegant-icons-style.css" rel="stylesheet" />
+    <script type="text/javascript" src="../js/lib/d3.v4.min.js"></script>
+    <script type="text/javascript" src="../js/lib/d3.color.min.js"></script>
+    <script type="text/javascript" src="../js/lib/c3.min.js"></script>
+    <script>
+        c3.load("../js/lib/c3_data.json");
+    </script>
+
+    <script type="text/javascript" src="js/variables.js"></script>
+    <script type="text/javascript" src="js/utils.js"></script>
+    <script type="text/javascript" src="js/rendering.js"></script>
+    <script type="text/javascript" src="js/optimization.js"></script>
+    <script type="text/javascript" src="js/index.js"></script>
+
+</head>
+
+<body>
+    <div id="variableDiv" style="position: fixed;width: 500px;height: 100%;overflow-y: scroll;">
+
+        <h2>Optimizing Color and Transparency <br>to Enhance the Perception of Overlapped Charts
+        </h2>
+        <hr>
+        <button onclick="F_Open_dialog(0)" style="margin-bottom: 5px;">Load Histogram</button>
+        <!-- <input type="file" id="fileLoad" style="display:none"> -->
+        <!-- <br> -->
+        <button onclick="F_Open_dialog(1)">Load Parallel Coordinates </button><br>
+        <button onclick="F_Open_dialog(2)">Load Convex Hull </button>
+        <button onclick="F_Open_dialog(3)">Load Venn Diagram </button>
+        <br>
+        <label id="status_running" style="color: red;"></label>
+        <hr>
+        <h3>Scoring Function Weight</h3>
+        <label for="weightInputName-0">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Within-Class Association
+            Weight:</label>
+        <input type="range" id="weightInputId-0" name="weightInputName-0" min="0" max="100" value="100"
+            oninput="changeValue(this)">
+        <label id="weightInputValueId-0">1.00</label>
+        <br>
+        <label for="weightInputName-1">Between-Class Disassociation Weight:</label>
+        <input type="range" id="weightInputId-1" name="weightInputName-1" min="0" max="100" value="100"
+            oninput="changeValue(this)">
+        <label id="weightInputValueId-1">1.00</label>
+        <br>
+        <label
+            for="weightInputName-2">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Color
+            Separability Weight:</label>
+        <input type="range" id="weightInputId-2" name="weightInputName-2" min="0" max="100" value="100"
+            oninput="changeValue(this)">
+        <label id="weightInputValueId-2">1.00</label>
+        <br>
+        <hr>
+        <h3>Minimum JND Threshold</h3>
+        <label for="weightMinimumJND">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Just Noticeable
+            Difference:</label>
+        <input type="range" id="weightMinimumJNDId" name="weightMinimumJND" min="15" max="99" value="30"
+            oninput="changeValueJND(this.value)">
+        <label id="weightMinimumJNDLabelId">3.0</label>
+        <br>
+        <hr>
+        <h3>Minimum Background Contrast Threshold</h3>
+        <label for="weightMinimumLD">Luminance Difference to Background:</label>
+        <input type="range" id="weightMinimumLDId" name="weightMinimumLD" min="0" max="20" value="5"
+            oninput="changeValueLD(this.value)">
+        <label id="weightMinimumLDLabelId">5</label>
+        <br>
+        <hr>
+        <h3>Optimization</h3>
+        <p style="color: red;">The default optimization is the fast version, please try the quality generation when the
+            results are not
+            satisfied.</p>
+        <button onclick="reGenerateFast()">Re-generate(Fast)</button>
+        <button onclick="reGenerateQuality()">Re-generate(Quality)</button>
+        <!-- blending model selection -->
+        <fieldset style="margin-top: 15px;">
+            <legend>Model Selection</legend>
+            <div>
+                <input type="radio" id="modelChoice1" name="model" value="standard" checked />
+                <label for="modelChoice1">Standard Alpha
+                    Blending&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
+            </div>
+            <div>
+                <input type="radio" id="modelChoice2" name="model" value="local" />
+                <label for="modelChoice2">Local Color
+                    Blending&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</label>
+            </div>
+            <div>
+                <input type="radio" id="modelChoice3" name="model" value="hue" />
+                <label for="modelChoice3">Hue-preserving Color Blending</label>
+            </div>
+        </fieldset>
+        <!-- color selection -->
+        <fieldset>
+            <legend>Choosing Background Color</legend>
+            <input type="radio" id="bgChoice1" name="bg" value="white" checked />
+            <span style="width: 20px;height: 20px;background: rgb(255,255,255);display: inline-block;"></span>
+            <input type="radio" id="bgChoice2" name="bg" value="black" style="margin-left: 100px;" />
+            <span style="width: 20px;height: 20px;background: rgb(0,0,0);display: inline-block;"></span>
+        </fieldset>
+        <fieldset>
+            <legend>Color Selection</legend>
+            <div id="usedColorsDiv">
+                <input type="checkbox" name="selectAll" id="chooseAllColorId" onclick="chooseAll()">
+                <label for="selectAll">Select All</label>
+                <br>
+            </div>
+        </fieldset>
+        <br>
+        <hr>
+        <h3>Input Data Illustration</h3>
+        <!-- <h4 id="diff-id">Difficulty = 0.00</h4> -->
+        <div id="inputDataDiv"></div>
+        <br>
+        <hr>
+
+        <div id="virtualDiv"></div>
+        <br>
+        <br>
+        <br>
+    </div>
+    <div id="mainDiv" style="margin-left: 400px;margin-left: 500px;"></div>
+    <div id="enumDiv" style="margin-left: 400px;margin-left: 500px;"></div>
+</body>
+
+<script>
+    // 
+    // response for the html input
+    // 
+    //open file dialog to get the file name
+    ///    SVGWIDTH = 600
+    // svg_width = SVGWIDTH - svg_margin.left - svg_margin.right
+    //svg_height = SVGHEIGHT - svg_margin.top - svg_margin.bottom
+    let loadData = loadHist
+    // function F_Open_dialog(flag) {
+    //     switch (flag) {
+    //         case 0:
+    //             loadData = loadHist;
+    //             break;
+    //         case 1:
+    //             loadData = loadParallel;
+    //             break;
+    //         case 2:
+    //             loadData = loadHull;
+    //             break;
+    //         case 3:
+    //             loadData = loadVenn;
+    //             break;
+
+    //     }
+    //     let file_btn = document.getElementById("fileLoad");
+    //     file_btn.click();
+    // }
+    function F_Open_dialog(flag) {
+        switch (flag) {
+            case 0:
+                d3.text("./data/penguins-manual.csv", function (error, text) {
+                    if (error) throw error;
+                    loadHist(text)
+                });
+                break;
+            case 1:
+                d3.text("./data/parallel-wang.csv", function (error, text) {
+                    if (error) throw error;
+                    loadParallel(text)
+                });
+                break;
+            case 2:
+                d3.text("./data/wine_all_points_alcohol_malic.csv", function (error, text) {
+                    if (error) throw error;
+                    loadHull(text)
+                });
+                break;
+            case 3:
+                d3.text("./data/venn-diagrams.csv", function (error, text) {
+                    if (error) throw error;
+                    loadVenn(text)
+                });
+                break;
+
+        }
+
+    }
+
+    //used in website
+    // https://stackoverflow.com/questions/28584548/how-to-get-a-filename-in-html-and-use-it-in-d3-js-javascript
+    d3.select('#fileLoad').on('change', function () {
+        // Check for the various File API support.
+        if (window.File && window.FileReader && window.FileList && window.Blob) {
+            // Great success! All the File APIs are supported.
+        } else {
+            alert('The File APIs are not fully supported in this browser.');
+        }
+        let file = event.target.files[0];
+        var reader = new FileReader();
+
+        // Closure to capture the file information.
+        reader.onload = (function (theFile) {
+            return function (e) {
+                loadData(e.target.result);
+            };
+        })(file);
+
+        reader.readAsText(file);
+    });
+
+    function loadHist(text) {
+        //parse pure text to data, and cast string to number
+        let source_data = d3.csvParseRows(text)
+        console.log("source_data", source_data);
+
+        hist_data = []
+        for (let i = 0; i < source_data.length; i++) {
+            hist_data.push([])
+            for (let j = 0; j < source_data[i].length; j++) {
+                if (source_data[i][j] != '') {
+                    hist_data[i].push(+source_data[i][j])
+                }
+            }
+        }
+
+        bars_num = hist_data[0].length
+        axis_x_bandwidth = Math.floor(svg_width / bars_num)
+        svg_margin.left = svg_margin.right = Math.floor((SVGWIDTH - axis_x_bandwidth * bars_num) / 2)
+        axis_y = d3.scaleLinear()
+            .range([svg_height, 0])
+            .domain([0, d3.max(hist_data, function (d) {
+                return d3.max(d)
+            })]);
+
+        processHist()
+    }
+
+    function loadParallel(text) {
+        //parse pure text to data, and cast string to number
+        let source_data = d3.csvParseRows(text)
+        console.log("source_data", source_data);
+
+        let tmp_hist_data = {}
+        axis_x_values = new Set()
+        for (let i = 0; i < source_data.length; i++) {
+            if (!tmp_hist_data[source_data[i][2]]) tmp_hist_data[source_data[i][2]] = []
+            tmp_hist_data[source_data[i][2]].push([+source_data[i][0], +source_data[i][1]])
+            axis_x_values.add(+source_data[i][0])
+        }
+        hist_data = new Array(Object.keys(tmp_hist_data).length)
+        for (let key in tmp_hist_data) {
+            hist_data[+key] = tmp_hist_data[key]
+        }
+        axis_x = d3.scaleLinear()
+            .range([0, svg_width])
+            .domain(d3.extent(source_data, function (d) {
+                return +d[0]
+            }));
+        axis_y = d3.scaleLinear()
+            .range([svg_height, 0])
+            .domain(d3.extent(source_data, function (d) {
+                return +d[1]
+            }));
+
+        processParallel()
+    }
+
+    function loadHull(text) {
+        //parse pure text to data, and cast string to number
+        let source_data = d3.csvParseRows(text)
+        console.log("source_data", source_data);
+
+        let tmp_hist_data = {}, label_set = new Set
+        for (let i = 0; i < source_data.length; i++) {
+            if (!tmp_hist_data[source_data[i][2]]) tmp_hist_data[source_data[i][2]] = []
+            label_set.add(source_data[i][2])
+            tmp_hist_data[source_data[i][2]].push([+source_data[i][0], +source_data[i][1]])
+        }
+        let label_arr = Array.from(label_set)
+        hist_data = new Array(Object.keys(tmp_hist_data).length)
+        for (let key in tmp_hist_data) {
+            hist_data[label_arr.indexOf(key)] = d3.polygonHull(tmp_hist_data[key])
+        }
+
+        axis_x = d3.scaleLinear()
+            .range([0, svg_width])
+            .domain(d3.extent(source_data, function (d) {
+                return +d[0]
+            }));
+        axis_y = d3.scaleLinear()
+            .range([0, svg_height])
+            .domain(d3.extent(source_data, function (d) {
+                return +d[1]
+            }));
+
+        processHull()
+    }
+
+    function loadVenn(text) {
+        //parse pure text to data, and cast string to number
+        let source_data = d3.csvParseRows(text)
+        console.log("source_data", source_data);
+
+        hist_data = []
+        for (let i = 0; i < source_data.length; i++) {
+            hist_data.push([])
+            for (let j = 0; j < source_data[i].length; j++) {
+                if (source_data[i][j] != '') {
+                    hist_data[i].push(+source_data[i][j])
+                }
+            }
+        }
+
+        bars_num = hist_data[0].length
+        axis_x_bandwidth = Math.floor(svg_width / bars_num)
+        svg_margin.left = svg_margin.right = Math.floor((SVGWIDTH - axis_x_bandwidth * bars_num) / 2)
+        axis_y = d3.scaleLinear()
+            .range([svg_height, 0])
+            .domain([0, d3.max(hist_data, function (d) {
+                return d3.max(d)
+            })]);
+
+        processVenn()
+    }
+
+    function changeValue(v) {
+        let id = +v.id.split("-")[1]
+        d3.select("#weightInputValueId-" + id).text((+v.value / 100).toFixed(2))
+        weight_global[id] = +v.value / 100
+    }
+
+    function changeValueJND(v) {
+        d3.select("#weightMinimumJNDLabelId").text((+v / 10).toFixed(1))
+        threshold_variables[0] = +d3.select("#weightMinimumJNDId").property("value") / 10
+    }
+
+    function changeValueLD(v) {
+        d3.select("#weightMinimumLDLabelId").text((+v))
+        threshold_variables[1] = +d3.select("#weightMinimumLDId").property("value")
+    }
+
+    d3.selectAll("input[name='model']").on("change", function () {
+        switch (this.value) {
+            case "standard":
+                traditionalColorBlending = traditionalColorBlendingTmp
+                curr_blending_method = "Standard Color Blending"
+                break;
+            case "local":
+                traditionalColorBlending = wangLocalSolution
+                curr_blending_method = "Local Color Blending"
+                break;
+            case "hue":
+                traditionalColorBlending = huePreservingColorBlending
+                curr_blending_method = "Hue-preserving Color Blending"
+                break;
+        }
+    });
+
+    d3.selectAll("input[name='bg']").on("change", function () {
+        switch (this.value) {
+            case "white":
+                background_color = [255, 255, 255, 1]
+                break;
+            case "black":
+                background_color = [0, 0, 0, 1]
+                break;
+        }
+    });
+
+    function addColorOptions(palette, text, visible = false, num = palette.length) {
+        let div_main = d3.select("#usedColorsDiv").append("div")
+        div_main.append("input")
+            .attr("type", "checkbox")
+            .property("checked", visible)
+            .on("click", function () {
+                if (!d3.select(this)._groups[0][0].checked) {
+                    d3.select("#usedColorsDiv").selectAll("input.colorOptions#" + text).property("checked", false)
+                } else {
+                    d3.select("#usedColorsDiv").selectAll("input.colorOptions#" + text).property("checked", true)
+                }
+            })
+        div_main.append("label").text(text).style("display", "inline-block").style("width", "80px")
+        for (let i = 0; i < num; i++) {
+            let div = div_main.append("div").style("display", "inline-block")
+            div.append("input")
+                .attr("type", "checkbox")
+                .attr("class", "colorOptions")
+                .attr("id", text)
+                .property("checked", visible)
+                .attr("value", palette[i])
+                .style("margin-left", "10px")
+            div.append("span")
+                .style("width", "20px").style("height", "20px").style("display", "inline-block")
+                .style("background", palette[i])
+        }
+    }
+    addColorOptions(Tableau_10_palette, "Tableau", false, 8)
+    let colorgorical_palette = ["#88e99a", "#b427b7", "#528efb", "#f3c5fa", "#2c4a5e", "#27cae6", "#6c2c76", "#50a33b"]
+    addColorOptions(colorgorical_palette, "Colorgorical")
+    let brewer_palette = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf']
+    addColorOptions(brewer_palette, "ColorBrewer")
+    // let pure_color_palette = [d3.rgb(255, 0, 0), d3.rgb(0, 255, 0), d3.rgb(0, 0, 255), d3.rgb(255, 255, 0), d3.rgb(255, 0, 255), d3.rgb(0, 255, 255), d3.rgb(255, 255, 255), d3.rgb(0, 0, 0)]
+    // addColorOptions(pure_color_palette, "Pure")
+
+    function getInputColors(clusterNum) {
+        let input_colors = [];
+        let inputs = d3.select("#usedColorsDiv").selectAll("input.colorOptions");
+        inputs.each(function () {
+            // console.log(d3.select(this)._groups[0][0].value, d3.select(this)._groups[0][0].checked);
+            if (d3.select(this)._groups[0][0].checked) {
+                input_colors.push(d3.select(this)._groups[0][0].value);
+            }
+        });
+        return input_colors
+    }
+
+    function chooseAll() {
+        if (!d3.select("#chooseAllColorId")._groups[0][0].checked) {
+            d3.select("#usedColorsDiv").selectAll("input").property("checked", false)
+        } else {
+            d3.select("#usedColorsDiv").selectAll("input").property("checked", true)
+        }
+
+    }
+
+
+    function reGenerate() {
+        // get weightings
+        let cluster_num = hist_data.length
+        for (let i = 0; i < weight_global.length; i++) {
+            d3.select("#weightInputValueId-" + i).text(weight_global[i])
+        }
+        // get input colors
+        let input_colors = getInputColors()
+        // if (input_colors.length < cluster_num) {
+        //     alert("Please select enough colors!")
+        //     return
+        // }
+        let orders = Array.from(new Array(cluster_num).keys())
+        let solution = { palette: [], order: orders }
+        let used_colors = []
+        for (let i = 0; i < input_colors.length; i++) {
+            let c = d3.rgb(input_colors[i])
+            used_colors.push([c.r, c.g, c.b, 0.5])
+        }
+        console.log("used_colors", used_colors);
+
+        solution.palette = used_colors.slice(0, cluster_num)
+
+        let div = d3.select("#mainDiv")
+        // div.insert("hr", ":first-child")
+        let opacityDiv
+        // changing assignment and depth, without changing color
+        if (input_colors.length >= cluster_num) {
+            optimizeColorSign = -0.5
+
+            solution = simulatedAnnealing(hist_data, used_colors, orders)
+            opacityDiv = div.insert("div", ":first-child").attr("id", "renderingDiv")//.style("display", "inline-block").style("margin-left", "30px")
+
+            opacityDiv.append("h2").text("Optimal Color Assignment & Opacity & Rendering Order")
+            score = getPaletteScore(solution.palette, solution.order)
+            if (Object.keys(global_axis_pixels).length != 0)
+                getAxisColors(solution.palette, solution.order)
+            renderingPixels(blended_colors_all, opacityDiv)
+            showOptimizedColors(solution.palette, solution.order, opacityDiv)
+        } else {
+            // changing depth and color
+            optimizeColorSign = 1.5
+
+            solution = simulatedAnnealing(hist_data, [], orders)
+            opacityDiv = div.insert("div", ":first-child").attr("id", "renderingDiv")//.style("display", "inline-block").style("margin-left", "30px")
+            opacityDiv.append("h2").text("Optimal Color & Opacity & Rendering Order")
+
+            console.log(solution);
+
+            // draw initialization
+            score = getPaletteScore(solution.initilization.palette, solution.initilization.order)
+            if (Object.keys(global_axis_pixels).length != 0)
+                getAxisColors(solution.initilization.palette, solution.initilization.order)
+            renderingPixels(blended_colors_all, opacityDiv)
+            showOptimizedColors(solution.initilization.palette, solution.initilization.order, opacityDiv)
+
+            // draw convergence line
+            showTrend(solution.intermediate_scores, opacityDiv)
+
+            // draw optimization
+            score = getPaletteScore(solution.palette, solution.order)
+            if (Object.keys(global_axis_pixels).length != 0)
+                getAxisColors(solution.palette, solution.order)
+            renderingPixels(blended_colors_all, opacityDiv)
+            showOptimizedColors(solution.palette, solution.order, opacityDiv)
+        }
+        opacityDiv.append("div")
+            .attr("class", "delete_sign")
+            .append("i")
+            .attr("class", "icon_trash")
+            .style("color", "black")
+            .on("click", function () {
+                opacityDiv.remove();
+                d3.event.stopPropagation()
+            });
+        opacityDiv.append("hr")
+
+    }
+
+    function reGenerateFast() {
+        // d3.selectAll("#mainDiv").selectAll("*").remove()
+        d3.select("#status_running").text("Optimizing...")
+        setTimeout(() => {
+            dec_factor = 0.99
+            reGenerate()
+            d3.select("#status_running").text("")
+        }, 100)
+    }
+
+    function reGenerateQuality() {
+        // d3.selectAll("#mainDiv").selectAll("*").remove()
+        d3.select("#status_running").text("Optimizing...")
+        setTimeout(() => {
+            dec_factor = 0.999
+            reGenerate()
+            d3.select("#status_running").text("")
+        }, 100)
+    }
+
+
+</script>
+
+</html>
